@@ -1,11 +1,12 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LayoutDashboard, Users, CreditCard, LogOut, Dumbbell, Bell } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, LogOut, ScanLine, Settings } from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/checkin', icon: ScanLine, label: 'Check-in' },
   { to: '/members', icon: Users, label: 'Membres' },
-  { to: '/plans', icon: CreditCard, label: 'Plans' }
+  { to: '/plans', icon: CreditCard, label: 'Plans' },
 ]
 
 export default function Layout() {
@@ -13,62 +14,58 @@ export default function Layout() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-[#0F172A] flex">
-      {/* Sidebar */}
-      <aside className="w-56 bg-[#1E293B] flex flex-col flex-shrink-0 border-r border-[#334155]/50">
-        {/* Brand */}
-        <div className="p-5 border-b border-[#334155]/50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#F59E0B] to-[#D97706] flex items-center justify-center flex-shrink-0 shadow-lg shadow-[#F59E0B]/20">
-              <Dumbbell size={17} className="text-[#0F172A]" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-white font-bold text-sm tracking-tight">FitManager</div>
-              <div className="text-[#94A3B8] text-[10px] truncate">{gym?.name || 'Ma salle'}</div>
-            </div>
-          </div>
+    <div className="min-h-screen flex" style={{ background: '#050A18' }}>
+      {/* Sidebar - icônes uniquement */}
+      <aside className="w-16 flex flex-col flex-shrink-0 py-4 items-center"
+        style={{ background: 'rgba(15,23,42,0.95)', borderRight: '1px solid rgba(255,255,255,0.05)' }}>
+        
+        {/* Logo */}
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-8 flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)', boxShadow: '0 0 20px rgba(245,158,11,0.3)' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4"/>
+          </svg>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 p-3 space-y-0.5">
-          <p className="text-[#64748B] text-[10px] font-semibold uppercase tracking-wider px-3 py-2">Menu</p>
+        {/* Nav items */}
+        <nav className="flex flex-col gap-2 flex-1">
           {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to} className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                isActive
-                  ? 'bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20'
-                  : 'text-[#94A3B8] hover:text-white hover:bg-[#0F172A]'
-              }`
-            }>
-              <Icon size={16} />
-              {label}
+            <NavLink key={to} to={to} title={label}
+              className={({ isActive }) =>
+                `group relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                  isActive ? 'text-[#F59E0B]' : 'text-[#475569] hover:text-white'
+                }`
+              }
+              style={({ isActive }) => ({
+                background: isActive ? 'rgba(245,158,11,0.15)' : 'transparent',
+                border: isActive ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent'
+              })}
+            >
+              <Icon size={18} />
+              {/* Tooltip */}
+              <span className="absolute left-14 bg-[#1E293B] text-white text-xs px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50"
+                style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                {label}
+              </span>
             </NavLink>
           ))}
         </nav>
 
-        {/* User */}
-        <div className="p-4 border-t border-[#334155]/50">
-          <div className="flex items-center gap-2.5 mb-3 px-1">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#F59E0B] to-[#D97706] flex items-center justify-center flex-shrink-0">
-              <span className="text-[#0F172A] text-xs font-bold">{manager?.fullName?.charAt(0)?.toUpperCase()}</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-white text-xs font-semibold truncate">{manager?.fullName}</div>
-              <div className="text-[#94A3B8] text-[10px] capitalize">{manager?.role}</div>
-            </div>
-          </div>
-          <button
-            onClick={() => { logout(); navigate('/login') }}
-            className="flex items-center gap-2 text-[#94A3B8] hover:text-red-400 text-xs px-1 transition-colors w-full"
-          >
-            <LogOut size={12} />
-            Déconnexion
+        {/* User avatar */}
+        <div className="mt-auto flex flex-col items-center gap-3">
+          <button onClick={() => { logout(); navigate('/login') }} title="Déconnexion"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-[#475569] hover:text-red-400 transition-colors">
+            <LogOut size={16} />
           </button>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-[#0F172A]"
+            style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}>
+            {manager?.fullName?.charAt(0)?.toUpperCase()}
+          </div>
         </div>
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto bg-[#0F172A]">
+      <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
     </div>
