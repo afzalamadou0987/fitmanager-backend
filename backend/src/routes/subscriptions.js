@@ -1,144 +1,115 @@
 const express = require('express');
-const supabase = require('../config/supabase');
+const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
 const router = express.Router();
 
 router.use(authMiddleware);
 
-// POST /api/subscriptions - Créer / renouveler un abonnement
+// POST /api/subscriptions — créer/renouveler
 router.post('/', async (req, res) => {
   const { gymId, id: managerId } = req.manager;
   const { memberId, planId, startDate, paymentMethod, paymentRef } = req.body;
+  if (!memberId || !planId) return res.status(400).json({ error: 'memberId et planId sont requis' });
 
-  if (!memberId || !planId) {
-    return res.status(400).json({ error: 'memberId et planId sont requis' });
-  }
-
+  const client = await pool.connect();
   try {
-    // Récupérer le plan pour calculer la date de fin et le montant
-    const { data: plan, error: planError } = await supabase
-      .from('subscription_plans')
-      .select('*')
-      .eq('id', planId)
-      .eq('gym_id', gymId)
-      .single();
+    await client.query('BEGIN');
 
-    if (planError || !plan) {
+    const planRes = await client.query(
+      'SELECT * FROM subscription_plans WHERE id=$1 AND gym_id=$2 AND is_active=true',
+      [planId, gymId]
+    );
+    if (!planRes.rows.length) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Plan introuvable' });
     }
+    const plan = planRes.rows[0];
 
     const start = startDate ? new Date(startDate) : new Date();
     const end = new Date(start);
     end.setDate(end.getDate() + plan.duration_days);
 
-    // Expirer les anciens abonnements actifs du membre
-    await supabase
-      .from('subscriptions')
-      .update({ status: 'expired' })
-      .eq('member_id', memberId)
-      .eq('gym_id', gymId)
-      .eq('status', 'active');
+    // Expirer les anciens abonnements actifs
+    await client.query(
+      "UPDATE subscriptions SET status='expired' WHERE member_id=$1 AND gym_id=$2 AND status='active'",
+      [memberId, gymId]
+    );
 
-    // Créer le nouvel abonnement
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .insert({
-        member_id: memberId,
-        plan_id: planId,
-        gym_id: gymId,
-        start_date: start.toISOString().split('T')[0],
-        end_date: end.toISOString().split('T')[0],
-        status: 'active',
-        amount_paid: plan.price,
-        payment_method: paymentMethod || 'cash',
-        payment_ref: paymentRef || null,
-        created_by: managerId
-      })
-      .select(`
-        *,
-        subscription_plans(name, duration_days, price),
-        members(full_name, phone)
-      `)
-      .single();
+    const result = await client.query(
+      `INSERT INTO subscriptions (member_id, plan_id, gym_id, start_date, end_date, status, amount_paid, payment_method, payment_ref, created_by)
+       VALUES ($1,$2,$3,$4,$5,'active',$6,$7,$8,$9) RETURNING *`,
+      [memberId, planId, gymId,
+       start.toISOString().split('T')[0],
+       end.toISOString().split('T')[0],
+       plan.price, paymentMethod || 'cash', paymentRef || null, managerId]
+    );
 
-    if (error) throw error;
-    res.status(201).json(data);
+    await client.query('COMMIT');
+    res.status(201).json({
+      ...result.rows[0],
+      plan: { name: plan.name, duration_days: plan.duration_days, price: plan.price }
+    });
 
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
+  } finally {
+    client.release();
   }
 });
 
-// GET /api/subscriptions/expiring - Abonnements qui expirent bientôt
+// GET /api/subscriptions/expiring — alertes expiration
 router.get('/expiring', async (req, res) => {
   const { gymId } = req.manager;
   const days = parseInt(req.query.days) || 7;
+  const today = new Date().toISOString().split('T')[0];
+  const limit = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   try {
-    const today = new Date();
-    const limitDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
-
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select(`
-        *,
-        members(id, full_name, phone),
-        subscription_plans(name)
-      `)
-      .eq('gym_id', gymId)
-      .eq('status', 'active')
-      .lte('end_date', limitDate.toISOString().split('T')[0])
-      .gte('end_date', today.toISOString().split('T')[0])
-      .order('end_date', { ascending: true });
-
-    if (error) throw error;
-    res.json(data);
-
+    const result = await pool.query(
+      `SELECT s.*, m.full_name, m.phone, p.name as plan_name
+       FROM subscriptions s
+       JOIN members m ON m.id=s.member_id
+       JOIN subscription_plans p ON p.id=s.plan_id
+       WHERE s.gym_id=$1 AND s.status='active' AND s.end_date>=$2 AND s.end_date<=$3
+       ORDER BY s.end_date ASC`,
+      [gymId, today, limit]
+    );
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// GET /api/subscriptions/member/:memberId - Historique d'un membre
+// GET /api/subscriptions/member/:memberId — historique
 router.get('/member/:memberId', async (req, res) => {
   const { gymId } = req.manager;
-
   try {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .select(`
-        *,
-        subscription_plans(name, duration_days, price)
-      `)
-      .eq('member_id', req.params.memberId)
-      .eq('gym_id', gymId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    res.json(data);
-
+    const result = await pool.query(
+      `SELECT s.*, p.name as plan_name, p.duration_days, p.price as plan_price
+       FROM subscriptions s
+       JOIN subscription_plans p ON p.id=s.plan_id
+       WHERE s.member_id=$1 AND s.gym_id=$2
+       ORDER BY s.created_at DESC`,
+      [req.params.memberId, gymId]
+    );
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// PATCH /api/subscriptions/:id/cancel - Annuler un abonnement
+// PATCH /api/subscriptions/:id/cancel
 router.patch('/:id/cancel', async (req, res) => {
   const { gymId } = req.manager;
-
   try {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .update({ status: 'cancelled' })
-      .eq('id', req.params.id)
-      .eq('gym_id', gymId)
-      .select()
-      .single();
-
-    if (error || !data) return res.status(404).json({ error: 'Abonnement introuvable' });
-    res.json(data);
-
+    const result = await pool.query(
+      "UPDATE subscriptions SET status='cancelled' WHERE id=$1 AND gym_id=$2 RETURNING *",
+      [req.params.id, gymId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Abonnement introuvable' });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }

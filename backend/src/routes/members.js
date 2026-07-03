@@ -1,231 +1,218 @@
 const express = require('express');
-const supabase = require('../config/supabase');
+const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
 const router = express.Router();
 
 router.use(authMiddleware);
 
-// GET /api/members - Liste membres avec statut abonnement
+// GET /api/members — liste avec statut abonnement
 router.get('/', async (req, res) => {
   const { gymId } = req.manager;
   const { search, page = 1, limit = 20 } = req.query;
 
   try {
-    let query = supabase
-      .from('members')
-      .select(`
-        *,
-        subscriptions(
-          id, status, start_date, end_date, amount_paid, payment_method,
-          subscription_plans(name, duration_days, price)
-        )
-      `)
-      .eq('gym_id', gymId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+    const params = [gymId];
+    let where = 'WHERE m.gym_id = $1 AND m.is_active = true';
 
     if (search) {
-      query = query.or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`);
+      params.push(`%${search}%`);
+      where += ` AND (m.full_name ILIKE $${params.length} OR m.phone ILIKE $${params.length})`;
     }
 
-    const from = (page - 1) * limit;
-    query = query.range(from, from + Number(limit) - 1);
+    params.push(Number(limit), (Number(page) - 1) * Number(limit));
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const result = await pool.query(
+      `SELECT m.*,
+              s.id as sub_id, s.status as sub_status, s.start_date, s.end_date,
+              s.amount_paid, s.payment_method,
+              p.name as plan_name, p.duration_days, p.price as plan_price
+       FROM members m
+       LEFT JOIN LATERAL (
+         SELECT * FROM subscriptions
+         WHERE member_id = m.id AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1
+       ) s ON true
+       LEFT JOIN subscription_plans p ON p.id = s.plan_id
+       ${where}
+       ORDER BY m.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
 
-    // Calcul du statut abonnement pour chaque membre
     const today = new Date();
-    const membersWithStatus = data.map(member => {
-      const activeSub = member.subscriptions?.find(s => s.status === 'active');
+    const members = result.rows.map(row => {
+      const base = {
+        id: row.id, full_name: row.full_name, phone: row.phone, email: row.email,
+        photo_url: row.photo_url, qr_code: row.qr_code,
+        registration_date: row.registration_date, notes: row.notes, created_at: row.created_at
+      };
 
-      if (!activeSub) {
-        return { ...member, subscriptionStatus: 'none', daysLeft: 0, currentSubscription: null };
-      }
+      if (!row.sub_id) return { ...base, subscriptionStatus: 'none', daysLeft: 0, currentSubscription: null };
 
-      const endDate = new Date(activeSub.end_date);
-      const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+      const daysLeft = Math.ceil((new Date(row.end_date) - today) / (1000 * 60 * 60 * 24));
+      const subscriptionStatus = daysLeft < 0 ? 'expired' : daysLeft <= 7 ? 'expiring_soon' : 'active';
 
-      let subscriptionStatus = 'active';
-      if (daysLeft < 0) subscriptionStatus = 'expired';
-      else if (daysLeft <= 7) subscriptionStatus = 'expiring_soon';
-
-      return { ...member, subscriptionStatus, daysLeft, currentSubscription: activeSub };
+      return {
+        ...base, subscriptionStatus, daysLeft,
+        currentSubscription: {
+          id: row.sub_id, status: row.sub_status,
+          start_date: row.start_date, end_date: row.end_date,
+          amount_paid: row.amount_paid, payment_method: row.payment_method,
+          plan: { name: row.plan_name, duration_days: row.duration_days, price: row.plan_price }
+        }
+      };
     });
 
-    res.json({ members: membersWithStatus });
+    res.json({ members });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// GET /api/members/stats/summary - Stats pour le dashboard
+// GET /api/members/stats/summary — stats dashboard
 router.get('/stats/summary', async (req, res) => {
   const { gymId } = req.manager;
-
   try {
-    const today = new Date();
-    const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const today = new Date().toISOString().split('T')[0];
+    const in7Days = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
-    const [
-      { count: totalMembers },
-      { count: activeSubscriptions },
-      { count: expiringSoon },
-      { data: monthlyPayments }
-    ] = await Promise.all([
-      supabase.from('members').select('*', { count: 'exact', head: true }).eq('gym_id', gymId).eq('is_active', true),
-      supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('gym_id', gymId).eq('status', 'active'),
-      supabase.from('subscriptions').select('*', { count: 'exact', head: true })
-        .eq('gym_id', gymId).eq('status', 'active')
-        .gte('end_date', today.toISOString().split('T')[0])
-        .lte('end_date', in7Days.toISOString().split('T')[0]),
-      supabase.from('subscriptions').select('amount_paid')
-        .eq('gym_id', gymId)
-        .gte('created_at', firstDayOfMonth.toISOString())
+    const [t, a, e, r] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM members WHERE gym_id=$1 AND is_active=true', [gymId]),
+      pool.query("SELECT COUNT(*) FROM subscriptions WHERE gym_id=$1 AND status='active'", [gymId]),
+      pool.query(
+        "SELECT COUNT(*) FROM subscriptions WHERE gym_id=$1 AND status='active' AND end_date>=$2 AND end_date<=$3",
+        [gymId, today, in7Days]
+      ),
+      pool.query(
+        'SELECT COALESCE(SUM(amount_paid),0) as total FROM subscriptions WHERE gym_id=$1 AND created_at>=$2',
+        [gymId, firstOfMonth]
+      )
     ]);
 
-    const monthlyRevenue = monthlyPayments?.reduce((sum, s) => sum + parseFloat(s.amount_paid || 0), 0) || 0;
-
-    res.json({ totalMembers, activeSubscriptions, expiringSoon, monthlyRevenue });
+    res.json({
+      totalMembers: parseInt(t.rows[0].count),
+      activeSubscriptions: parseInt(a.rows[0].count),
+      expiringSoon: parseInt(e.rows[0].count),
+      monthlyRevenue: parseFloat(r.rows[0].total)
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// GET /api/members/:id - Détail d'un membre
-router.get('/:id', async (req, res) => {
+// GET /api/members/qr/:qrCode — lookup QR pour check-in
+router.get('/qr/:qrCode', async (req, res) => {
   const { gymId } = req.manager;
-
   try {
-    const { data, error } = await supabase
-      .from('members')
-      .select(`
-        *,
-        subscriptions(
-          id, status, start_date, end_date, amount_paid, payment_method, created_at,
-          subscription_plans(name, duration_days, price)
-        )
-      `)
-      .eq('id', req.params.id)
-      .eq('gym_id', gymId)
-      .single();
+    const result = await pool.query(
+      `SELECT m.id, m.full_name, m.phone, m.photo_url, m.qr_code,
+              s.id as sub_id, s.status as sub_status, s.end_date, p.name as plan_name
+       FROM members m
+       LEFT JOIN LATERAL (
+         SELECT * FROM subscriptions WHERE member_id=m.id AND status='active' ORDER BY created_at DESC LIMIT 1
+       ) s ON true
+       LEFT JOIN subscription_plans p ON p.id=s.plan_id
+       WHERE m.qr_code=$1 AND m.gym_id=$2 AND m.is_active=true`,
+      [req.params.qrCode, gymId]
+    );
 
-    if (error || !data) return res.status(404).json({ error: 'Membre introuvable' });
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Membre introuvable' });
 
-    res.json(data);
+    const row = result.rows[0];
+    const daysLeft = row.end_date
+      ? Math.ceil((new Date(row.end_date) - new Date()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    res.json({
+      id: row.id, fullName: row.full_name, phone: row.phone,
+      photoUrl: row.photo_url, qrCode: row.qr_code,
+      subscriptionStatus: !row.sub_id ? 'none' : daysLeft < 0 ? 'expired' : daysLeft <= 7 ? 'expiring_soon' : 'active',
+      daysLeft,
+      currentSubscription: row.sub_id
+        ? { status: row.sub_status, endDate: row.end_date, planName: row.plan_name }
+        : null
+    });
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// POST /api/members - Créer un nouveau membre
+// GET /api/members/:id
+router.get('/:id', async (req, res) => {
+  const { gymId } = req.manager;
+  try {
+    const [memberRes, subsRes] = await Promise.all([
+      pool.query('SELECT * FROM members WHERE id=$1 AND gym_id=$2', [req.params.id, gymId]),
+      pool.query(
+        `SELECT s.*, p.name as plan_name, p.duration_days, p.price as plan_price
+         FROM subscriptions s
+         JOIN subscription_plans p ON p.id=s.plan_id
+         WHERE s.member_id=$1 ORDER BY s.created_at DESC`,
+        [req.params.id]
+      )
+    ]);
+
+    if (memberRes.rows.length === 0) return res.status(404).json({ error: 'Membre introuvable' });
+    res.json({ ...memberRes.rows[0], subscriptions: subsRes.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// POST /api/members
 router.post('/', async (req, res) => {
   const { gymId } = req.manager;
   const { fullName, phone, email, notes, registrationDate } = req.body;
-
   if (!fullName) return res.status(400).json({ error: 'Le nom complet est requis' });
 
   try {
-    const { data, error } = await supabase
-      .from('members')
-      .insert({
-        gym_id: gymId,
-        full_name: fullName,
-        phone,
-        email,
-        notes,
-        registration_date: registrationDate || new Date().toISOString().split('T')[0]
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    res.status(201).json(data);
+    const result = await pool.query(
+      'INSERT INTO members (gym_id, full_name, phone, email, notes, registration_date) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [gymId, fullName, phone || null, email || null, notes || null, registrationDate || new Date().toISOString().split('T')[0]]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// PUT /api/members/:id - Modifier un membre
+// PUT /api/members/:id
 router.put('/:id', async (req, res) => {
   const { gymId } = req.manager;
   const { fullName, phone, email, notes, isActive } = req.body;
 
+  const fields = [], params = [];
+  let i = 1;
+  if (fullName !== undefined) { fields.push(`full_name=$${i++}`); params.push(fullName); }
+  if (phone !== undefined) { fields.push(`phone=$${i++}`); params.push(phone); }
+  if (email !== undefined) { fields.push(`email=$${i++}`); params.push(email); }
+  if (notes !== undefined) { fields.push(`notes=$${i++}`); params.push(notes); }
+  if (isActive !== undefined) { fields.push(`is_active=$${i++}`); params.push(isActive); }
+  if (!fields.length) return res.status(400).json({ error: 'Aucun champ à modifier' });
+
+  params.push(req.params.id, gymId);
   try {
-    const updateData = {};
-    if (fullName !== undefined) updateData.full_name = fullName;
-    if (phone !== undefined) updateData.phone = phone;
-    if (email !== undefined) updateData.email = email;
-    if (notes !== undefined) updateData.notes = notes;
-    if (isActive !== undefined) updateData.is_active = isActive;
-
-    const { data, error } = await supabase
-      .from('members')
-      .update(updateData)
-      .eq('id', req.params.id)
-      .eq('gym_id', gymId)
-      .select()
-      .single();
-
-    if (error || !data) return res.status(404).json({ error: 'Membre introuvable' });
-    res.json(data);
+    const result = await pool.query(
+      `UPDATE members SET ${fields.join(',')} WHERE id=$${i} AND gym_id=$${i+1} RETURNING *`,
+      params
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Membre introuvable' });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-// DELETE /api/members/:id - Soft delete
+// DELETE /api/members/:id (soft delete)
 router.delete('/:id', async (req, res) => {
   const { gymId } = req.manager;
-
   try {
-    const { error } = await supabase
-      .from('members')
-      .update({ is_active: false })
-      .eq('id', req.params.id)
-      .eq('gym_id', gymId);
-
-    if (error) throw error;
+    await pool.query('UPDATE members SET is_active=false WHERE id=$1 AND gym_id=$2', [req.params.id, gymId]);
     res.json({ message: 'Membre désactivé' });
-  } catch (err) {
-    res.status(500).json({ error: 'Erreur serveur' });
-  }
-});
-
-// GET /api/members/qr/:qrCode - Lookup par QR code (pour le check-in)
-router.get('/qr/:qrCode', async (req, res) => {
-  const { gymId } = req.manager;
-
-  try {
-    const { data, error } = await supabase
-      .from('members')
-      .select(`
-        id, full_name, phone, photo_url, qr_code,
-        subscriptions(id, status, start_date, end_date, subscription_plans(name))
-      `)
-      .eq('qr_code', req.params.qrCode)
-      .eq('gym_id', gymId)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !data) return res.status(404).json({ error: 'Membre introuvable' });
-
-    const activeSub = data.subscriptions?.find(s => s.status === 'active');
-    const today = new Date();
-    const daysLeft = activeSub
-      ? Math.ceil((new Date(activeSub.end_date) - today) / (1000 * 60 * 60 * 24))
-      : 0;
-
-    res.json({
-      ...data,
-      subscriptionStatus: !activeSub ? 'none' : daysLeft < 0 ? 'expired' : daysLeft <= 7 ? 'expiring_soon' : 'active',
-      daysLeft,
-      currentSubscription: activeSub || null
-    });
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
