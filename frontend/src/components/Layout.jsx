@@ -1,12 +1,13 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LayoutDashboard, Users, CreditCard, ScanLine, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, ScanLine, BarChart2, LogOut, Settings } from 'lucide-react'
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard },
-  { to: '/checkin', icon: ScanLine },
-  { to: '/members', icon: Users },
-  { to: '/plans', icon: CreditCard },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/checkin', icon: ScanLine, label: 'Check-in' },
+  { to: '/members', icon: Users, label: 'Membres' },
+  { to: '/plans', icon: CreditCard, label: 'Plans' },
+  { to: '/stats', icon: BarChart2, label: 'Statistiques' },
 ]
 
 export default function Layout() {
@@ -15,10 +16,8 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex" style={{ background: '#090D14' }}>
-      {/* Ultra narrow sidebar */}
       <aside className="w-12 flex flex-col flex-shrink-0 items-center py-5 gap-1"
         style={{ background: '#0D1117', borderRight: '1px solid rgba(255,255,255,0.04)' }}>
-        {/* Logo */}
         <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-6 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -26,11 +25,15 @@ export default function Layout() {
           </svg>
         </div>
 
-        {navItems.map(({ to, icon: Icon }) => (
-          <NavLink key={to} to={to}
-            className={({ isActive }) => `w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isActive ? '' : 'text-[#3D4B5C] hover:text-white'}`}
+        {navItems.map(({ to, icon: Icon, label }) => (
+          <NavLink key={to} to={to} title={label}
+            className={({ isActive }) => `group relative w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isActive ? '' : 'text-[#3D4B5C] hover:text-white'}`}
             style={({ isActive }) => isActive ? { background: 'rgba(245,158,11,0.2)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' } : {}}>
             <Icon size={16}/>
+            <span className="absolute left-14 bg-[#1E293B] text-white text-xs px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50"
+              style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+              {label}
+            </span>
           </NavLink>
         ))}
 
