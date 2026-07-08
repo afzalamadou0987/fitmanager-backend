@@ -52,15 +52,15 @@ export default function Register() {
             )}
 
             <p className="text-[#475569] text-[10px] font-bold uppercase tracking-widest">Votre salle</p>
-            <input value={form.gymName} onChange={e => set('gymName', e.target.value)} required placeholder="" {...inp} />
+            <input value={form.gymName} onChange={e => set('gymName', e.target.value)} required placeholder="Ex: Zeyno Gym" {...inp} />
             <div className="grid grid-cols-2 gap-3">
-              <input value={form.gymAddress} onChange={e => set('gymAddress', e.target.value)} placeholder="" {...inp} />
-              <input value={form.gymPhone} onChange={e => set('gymPhone', e.target.value)} placeholder="" {...inp} />
+              <input value={form.gymAddress} onChange={e => set('gymAddress', e.target.value)} placeholder="Quartier / Ville" {...inp} />
+              <input value={form.gymPhone} onChange={e => set('gymPhone', e.target.value)} placeholder="Ex: 90 00 00 00" {...inp} />
             </div>
 
             <p className="text-[#475569] text-[10px] font-bold uppercase tracking-widest pt-2">Votre compte</p>
-            <input value={form.fullName} onChange={e => set('fullName', e.target.value)} required placeholder="" {...inp} />
-            <input type="email" value={form.email} onChange={e => set('email', e.target.value)} required placeholder="" {...inp} />
+            <input value={form.fullName} onChange={e => set('fullName', e.target.value)} required placeholder="Votre nom complet" {...inp} />
+            <input type="email" value={form.email} onChange={e => set('email', e.target.value)} required placeholder="email@exemple.com" {...inp} />
             <div className="relative">
               <input type={showPass ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)} required minLength={6} placeholder="" {...inp} style={{...inp.style, paddingRight: '2.5rem'}} />
               <button type="button" onClick={() => setShowPass(!showPass)}
