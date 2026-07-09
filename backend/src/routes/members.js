@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
 const router = express.Router();
@@ -115,7 +115,7 @@ router.get('/qr/:qrCode', async (req, res) => {
          SELECT * FROM subscriptions WHERE member_id=m.id AND status='active' ORDER BY created_at DESC LIMIT 1
        ) s ON true
        LEFT JOIN subscription_plans p ON p.id=s.plan_id
-       WHERE m.qr_code=$1 AND m.gym_id=$2 AND m.is_active=true`,
+       WHERE UPPER(LEFT(m.qr_code::text, 8)) = UPPER(LEFT($1::text, 8)) AND m.gym_id=$2 AND m.is_active=true`,
       [req.params.qrCode, gymId]
     );
 
