@@ -17,13 +17,13 @@ export function generateReceipt({ member, subscription, gym }) {
   doc.text('FitManager', 15, 16)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.text('Gestion de salle de sport Â· Togo', 15, 23)
+  doc.text('Gestion de salle de sport - Togo', 15, 23)
 
   // Titre
   doc.setTextColor(...DARK)
   doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
-  doc.text('REÃ‡U DE PAIEMENT', 105, 45, { align: 'center' })
+  doc.text('RECU DE PAIEMENT', 105, 45, { align: 'center' })
 
   // Infos salle
   doc.setFontSize(10)
@@ -39,9 +39,9 @@ export function generateReceipt({ member, subscription, gym }) {
   // Date & Ref
   doc.setTextColor(...GRAY)
   doc.text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, 150, 58)
-  doc.text(`RÃ©f : #${(subscription.id || '').substring(0, 8).toUpperCase()}`, 150, 64)
+  doc.text(`Réf : #${(subscription.id || '').substring(0, 8).toUpperCase()}`, 150, 64)
 
-  // Ligne sÃ©paratrice
+  // Ligne séparatrice
   doc.setDrawColor(...ORANGE)
   doc.setLineWidth(0.8)
   doc.line(15, 78, 195, 78)
@@ -53,22 +53,22 @@ export function generateReceipt({ member, subscription, gym }) {
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(30, 30, 30)
-  doc.text(member.fullName || member.full_name || 'â€”', 15, 95)
+  doc.text(member.fullName || member.full_name || '--', 15, 95)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(...GRAY)
-  doc.text(member.phone || 'â€”', 15, 101)
+  doc.text(member.phone || '--', 15, 101)
 
-  // Table dÃ©tails
+  // Table détails
   autoTable(doc, {
     startY: 112,
-    head: [['Description', 'DÃ©tails']],
+    head: [['Description', 'Détails']],
     body: [
-      ['Plan d\'abonnement', subscription.plan?.name || subscription.planName || 'â€”'],
-      ['DurÃ©e', `${subscription.plan?.duration_days || 'â€”'} jours`],
-      ['Date de dÃ©but', subscription.start_date ? new Date(subscription.start_date).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')],
-      ['Date de fin', subscription.end_date ? new Date(subscription.end_date).toLocaleDateString('fr-FR') : 'â€”'],
-      ['Mode de paiement', subscription.payment_method === 'cash' ? 'ðŸ’µ Cash' : subscription.payment_method === 'flooz' ? 'ðŸ“± Flooz' : 'ðŸ“± T-Money'],
+      ['Plan', subscription.plan?.name || subscription.planName || '--'],
+      ['Duree', `${subscription.plan?.duration_days || '--'} jours`],
+      ['Debut', subscription.start_date ? new Date(subscription.start_date).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')],
+      ['Fin', subscription.end_date ? new Date(subscription.end_date).toLocaleDateString('fr-FR') : '--'],
+      ['Paiement', subscription.payment_method === 'cash' ? '💵 Cash' : subscription.payment_method === 'flooz' ? '📱 Flooz' : '📱 T-Money'],
     ],
     headStyles: { fillColor: ORANGE, textColor: DARK, fontStyle: 'bold', fontSize: 10 },
     bodyStyles: { fontSize: 10, textColor: [50, 50, 50] },
@@ -84,15 +84,15 @@ export function generateReceipt({ member, subscription, gym }) {
   doc.setTextColor(...DARK)
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text('MONTANT TOTAL PAYÃ‰', 20, finalY + 10)
+  doc.text('MONTANT TOTAL PAYE', 20, finalY + 10)
   doc.text(`${new Intl.NumberFormat('fr-FR').format(subscription.amount_paid || 0)} FCFA`, 192, finalY + 10, { align: 'right' })
 
   // Footer
   doc.setTextColor(...GRAY)
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
-  doc.text('Merci pour votre confiance. Ce reÃ§u fait foi de paiement.', 105, 268, { align: 'center' })
-  doc.text('FitManager â€” La solution de gestion de salle au Togo ðŸ‡¹ðŸ‡¬', 105, 274, { align: 'center' })
+  doc.text('Merci pour votre confiance.', 105, 268, { align: 'center' })
+  doc.text('FitManager - La solution de gestion de salle au Togo', 105, 274, { align: 'center' })
 
   const name = (member.fullName || member.full_name || 'membre').replace(/ /g, '-')
   doc.save(`recu-${name}-${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.pdf`)
@@ -107,24 +107,24 @@ export function exportMembersPDF({ members, gym }) {
   doc.setTextColor(...DARK)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text('FitManager â€” Liste des membres', 15, 14)
+  doc.text('FitManager - Liste des membres', 15, 14)
 
   doc.setTextColor(50, 50, 50)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.text(`${gym?.name || 'Ma Salle'} Â· ExportÃ© le ${new Date().toLocaleDateString('fr-FR')} Â· ${members.length} membres`, 15, 32)
+  doc.text(`${gym?.name || 'Ma Salle'} · Exporté le ${new Date().toLocaleDateString('fr-FR')} · ${members.length} membres`, 15, 32)
 
   autoTable(doc, {
     startY: 38,
-    head: [['Nom', 'TÃ©lÃ©phone', 'Statut', 'Plan', 'Expiration']],
+    head: [['Nom', 'Tel', 'Statut', 'Plan', 'Expiration']],
     body: members.map(m => [
-      m.full_name || 'â€”',
-      m.phone || 'â€”',
+      m.full_name || '--',
+      m.phone || '--',
       m.subscriptionStatus === 'active' ? 'Actif' :
         m.subscriptionStatus === 'expiring_soon' ? `Expire dans ${m.daysLeft}j` :
-        m.subscriptionStatus === 'expired' ? 'ExpirÃ©' : 'Sans abonnement',
-      m.currentSubscription?.plan?.name || 'â€”',
-      m.currentSubscription?.end_date ? new Date(m.currentSubscription.end_date).toLocaleDateString('fr-FR') : 'â€”'
+        m.subscriptionStatus === 'expired' ? 'Expire' : 'Sans abonnement',
+      m.currentSubscription?.plan?.name || '--',
+      m.currentSubscription?.end_date ? new Date(m.currentSubscription.end_date).toLocaleDateString('fr-FR') : '--'
     ]),
     headStyles: { fillColor: ORANGE, textColor: DARK, fontStyle: 'bold', fontSize: 9 },
     bodyStyles: { fontSize: 9 },
@@ -135,7 +135,7 @@ export function exportMembersPDF({ members, gym }) {
         const val = data.cell.raw
         if (val === 'Actif') data.cell.styles.textColor = [16, 185, 129]
         else if (val.includes('Expire')) data.cell.styles.textColor = [245, 158, 11]
-        else if (val === 'ExpirÃ©') data.cell.styles.textColor = [239, 68, 68]
+        else if (val === 'Expire') data.cell.styles.textColor = [239, 68, 68]
       }
     },
     margin: { left: 10, right: 10 }
@@ -143,13 +143,13 @@ export function exportMembersPDF({ members, gym }) {
 
   doc.setTextColor(...GRAY)
   doc.setFontSize(7)
-  doc.text('GÃ©nÃ©rÃ© par FitManager Â· fitmanager-backend.vercel.app', 105, doc.internal.pageSize.height - 8, { align: 'center' })
+  doc.text('Généré par FitManager · fitmanager-backend.vercel.app', 105, doc.internal.pageSize.height - 8, { align: 'center' })
 
   doc.save(`membres-${(gym?.name || 'salle').replace(/ /g, '-')}-${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.pdf`)
 }
 
 export function whatsappLink(phone, memberName, gymName, endDate) {
-  const msg = `Bonjour ${memberName} ðŸ‘‹\n\nVotre abonnement Ã  *${gymName}* expire le *${new Date(endDate).toLocaleDateString('fr-FR')}*.\n\nRendez-vous Ã  la salle pour renouveler et continuer Ã  profiter de nos services ðŸ’ª\n\nMerci !`
+  const msg = `Bonjour ${memberName} 👋\n\nVotre abonnement à *${gymName}* expire le *${new Date(endDate).toLocaleDateString('fr-FR')}*.\n\nRendez-vous à la salle pour renouveler et continuer à profiter de nos services 💪\n\nMerci !`
   const cleaned = phone?.replace(/[\s\-\+]/g, '') || ''
   const intlPhone = cleaned.startsWith('00') ? cleaned.slice(2) : cleaned.startsWith('0') ? `228${cleaned.slice(1)}` : cleaned.startsWith('228') ? cleaned : `228${cleaned}`
   return `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`
