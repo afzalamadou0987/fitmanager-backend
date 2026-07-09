@@ -195,7 +195,12 @@ function MemberModal({ member, plans, onClose, onSave, gym }) {
 
         {showQR && (
           <div className="flex justify-center p-5 rounded-xl bg-white">
-            <QRCodeSVG value={member.qr_code} size={160} />
+            <div className="text-center">
+              <QRCodeSVG value={(member.qr_code || '').substring(0, 8).toUpperCase()} size={160} />
+              <p className="text-xs text-[#64748B] mt-2 font-mono font-bold tracking-widest">
+                {(member.qr_code || '').substring(0, 8).toUpperCase()}
+              </p>
+            </div>
           </div>
         )}
 
