@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-// GET /api/members — liste avec statut abonnement
+// GET /api/members â€” liste avec statut abonnement
 router.get('/', async (req, res) => {
   const { gymId } = req.manager;
   const { search, page = 1, limit = 20 } = req.query;
@@ -70,7 +70,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/members/stats/summary — stats dashboard
+// GET /api/members/stats/summary â€” stats dashboard
 router.get('/stats/summary', async (req, res) => {
   const { gymId } = req.manager;
   try {
@@ -103,7 +103,7 @@ router.get('/stats/summary', async (req, res) => {
   }
 });
 
-// GET /api/members/qr/:qrCode — lookup QR pour check-in
+// GET /api/members/qr/:qrCode â€” lookup QR pour check-in
 router.get('/qr/:qrCode', async (req, res) => {
   const { gymId } = req.manager;
   try {
@@ -192,7 +192,7 @@ router.put('/:id', async (req, res) => {
   if (email !== undefined) { fields.push(`email=$${i++}`); params.push(email); }
   if (notes !== undefined) { fields.push(`notes=$${i++}`); params.push(notes); }
   if (isActive !== undefined) { fields.push(`is_active=$${i++}`); params.push(isActive); }
-  if (!fields.length) return res.status(400).json({ error: 'Aucun champ à modifier' });
+  if (!fields.length) return res.status(400).json({ error: 'Aucun champ Ã  modifier' });
 
   params.push(req.params.id, gymId);
   try {
@@ -212,7 +212,7 @@ router.delete('/:id', async (req, res) => {
   const { gymId } = req.manager;
   try {
     await pool.query('UPDATE members SET is_active=false WHERE id=$1 AND gym_id=$2', [req.params.id, gymId]);
-    res.json({ message: 'Membre désactivé' });
+    res.json({ message: 'Membre dÃ©sactivÃ©' });
   } catch (err) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
