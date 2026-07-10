@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LayoutDashboard, Users, CreditCard, ScanLine, BarChart2, LogOut, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, ScanLine, BarChart2, LogOut, Settings, AlertTriangle } from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -11,8 +11,37 @@ const navItems = [
 ]
 
 export default function Layout() {
-  const { manager, logout } = useAuth()
+  const { manager, logout, license } = useAuth()
   const navigate = useNavigate()
+
+  const daysLeft = license?.daysLeft || 0
+  const isExpiringSoon = daysLeft <= 3 && daysLeft > 0
+  const isExpired = license?.isExpired
+
+  if (isExpired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#050A18' }}>
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <AlertTriangle size={32} className="text-red-400"/>
+          </div>
+          <h1 className="text-2xl font-black text-white mb-2">Licence expirée</h1>
+          <p className="text-[#94A3B8] text-sm mb-6">Votre période d'accès à FitManager est terminée. Contactez Afzal pour renouveler.</p>
+          <a href="https://wa.me/22892510021?text=Bonjour Afzal, je veux renouveler ma licence FitManager pour ma salle."
+            target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-sm"
+            style={{ background: '#25D366' }}>
+            📱 Contacter Afzal sur WhatsApp
+          </a>
+          <div className="mt-4">
+            <button onClick={() => { logout(); navigate('/login') }} className="text-[#475569] text-xs hover:text-white">
+              Se déconnecter
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex" style={{ background: '#090D14' }}>
@@ -43,13 +72,33 @@ export default function Layout() {
           </button>
           <button onClick={() => { logout(); navigate('/login') }}
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black text-[#0F172A]"
-            style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }} title="Déconnexion">
+            style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }} title="Deconnexion">
             {manager?.fullName?.charAt(0)?.toUpperCase()}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto"><Outlet /></main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Bannière expiration */}
+        {isExpiringSoon && (
+          <div className="px-4 py-2 flex items-center justify-between text-xs"
+            style={{ background: daysLeft <= 1 ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.12)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
+            <span style={{ color: daysLeft <= 1 ? '#F87171' : '#FBBF24' }}>
+              ⚠️ Votre licence expire dans <strong>{daysLeft} jour{daysLeft > 1 ? 's' : ''}</strong>
+            </span>
+            <a href="https://wa.me/22892510021?text=Bonjour Afzal, je veux renouveler ma licence FitManager."
+              target="_blank" rel="noopener noreferrer"
+              className="font-bold px-3 py-1 rounded-lg text-[#0F172A]"
+              style={{ background: '#F59E0B' }}>
+              Renouveler
+            </a>
+          </div>
+        )}
+
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }
